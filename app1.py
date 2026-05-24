@@ -34,7 +34,6 @@ with st.sidebar:
     # 🖼️ 圖片放置點 1
     st.image(
         "pelvic_bruising.jpg", 
-        caption=, 
         use_container_width=True
     )
     
@@ -55,7 +54,6 @@ with st.sidebar:
     # 🖼️ 圖片放置點 2
     st.image(
         "chest_bruising.jpg", 
-        caption=, 
         use_container_width=True
     )
 
