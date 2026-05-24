@@ -111,7 +111,7 @@ def local_response_simulator(user_text):
         response_text = "收到，病人目前生命徵象不穩定，請問是要開立一般病房，還是要立刻聯絡重症醫學科（ICU）照會並保留加護病房床位？"
     
     else:
-        response_text = "收到醫囑。醫師，請確認該處置的詳細規格（如給氧流速、點滴針號與水別、照會科別等），或是下達下一步明確指令。"
+        response_text = "請醫師下達明確的醫囑（如給氧流速、點滴針號與水別、照會科別等）。"
 
     # 規則 3：生理數據惡化隱形施壓（超過 3 輪對話且沒有給予正確處置時）
     if st.session_state.round_count >= 3:
