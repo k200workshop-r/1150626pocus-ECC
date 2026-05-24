@@ -34,7 +34,7 @@ with st.sidebar:
     # 🖼️ 圖片放置點 1
     st.image(
         "pelvic_bruising.jpg", 
-        caption="ER Trauma Room 模擬情境", 
+        caption=, 
         use_container_width=True
     )
     
@@ -55,7 +55,7 @@ with st.sidebar:
     # 🖼️ 圖片放置點 2
     st.image(
         "chest_bruising.jpg", 
-        caption="臨床決策參考：骨盆固定帶（Pelvic Binder）綁紮位置", 
+        caption=, 
         use_container_width=True
     )
 
