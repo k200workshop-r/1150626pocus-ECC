@@ -20,7 +20,7 @@ if "round_count" not in st.session_state:
 
 TOTAL_SECONDS = 20 * 60  
 
-# 計時器啟動後在背景持續走時，一秒都不會停
+# 💡 安全修正：只有在學員「已經輸入指令、計時正式啟動」之後，才開啟背景自動刷新，避免一開網頁就無限卡死
 if st.session_state.start_time is not None and not st.session_state.time_up:
     st_autorefresh(interval=1000, key="timer_counter")
 
@@ -28,10 +28,11 @@ def reset_simulation():
     st.session_state.start_time = None
     st.session_state.time_up = False
     st.session_state.round_count = 0
+    # 💡 核心校正：這裡的欄位必須包含 image_url 與 image_caption，與後面完全對齊！
     st.session_state.messages = [
         {
             "role": "model", 
-            "content": "急診創傷重症室報告：車禍送入一名 46 歲女性。目前意識模糊，GCS 13分，面色蒼白，左大腿明顯畸形。監視器顯示心跳 125 次/分，血壓 88/52 mmHg，呼吸 24 次/分，血氧 94%。醫師，請問現在第一步指令是什麼？",
+            "content": "急診創症重症室報告：車禍送入一名 46 歲女性。目前意識模糊，GCS 13分，面色蒼白，左大腿明顯畸形。監視器顯示心跳 125 次/分，血壓 88/52 mmHg，呼吸 24 次/分，血氧 94%。醫師，請問現在第一步指令是什麼？",
             "image_url": None,
             "image_caption": None
         }
@@ -78,6 +79,91 @@ def call_gemini_trauma_api(user_message: str) -> NurseResponse:
 with st.sidebar:
     st.header("⏳ 搶救黃金時間")
     timer_placeholder = st.empty()  
+    
+    # 💡 語法校正：確保 if 按鈕的雙括號與冒號完全閉合
     if st.button("🔄 開始新回合", use_container_width=True):
         reset_simulation()
+        st.rerun()
+
+    if st.session_state.start_time is not None:
+        elapsed_time = time.time() - st.session_state.start_time
+        remaining_time = max(0, TOTAL_SECONDS - elapsed_time)
+        if remaining_time <= 0 and not st.session_state.time_up:
+            st.session_state.time_up = True
+            st.session_state.messages = []  
+            st.rerun()
+        mins, secs = divmod(int(remaining_time), 60)
+        timer_placeholder.metric(label="剩餘搶救時間", value=f"{mins:02d}:{secs:02d}")
+    else:
+        timer_placeholder.metric(label="尚未開始搶救", value="20:00")
+
+    st.divider()
+    st.header("📋 創傷病人基本資料")
+    st.write("**無名氏婦女 (46 y/o)**\n國道遭大貨車追撞，意識模糊，面色蒼白，左大腿畸形。初始休克狀態：88/52 mmHg。")
+    
+    # 側邊欄靜態圖防護
+    try:
+        st.image("trauma_scene.jpg", caption="ER Trauma Room", use_container_width=True)
+    except Exception:
+        st.caption("⚠️ [側邊欄參考圖片載入中]")
+
+# ─── 🔄 聊天畫面渲染 ───
+if "messages" not in st.session_state:
+    reset_simulation()
+
+# 歷史對話防護
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if msg.get("image_url"):
+            try:
+                st.image(msg["image_url"], caption=msg.get("image_caption"), width=550)
+            except Exception:
+                st.caption("⚠️ [歷史影像下載超時]")
+
+# ─── 住院醫師輸入區 ───
+if st.session_state.time_up:
+    st.error("⏱️ 20分鐘搶救時間已結束！歷史對話與影像紀錄已清除。")
+    st.chat_input("時間已耗盡，請重新開啟新回合。", disabled=True, key="er_trauma_chat_key")
+else:
+    if user_input := st.chat_input("請輸入緊急處置醫囑...", key="er_trauma_chat_key"):
+        if st.session_state.start_time is None:
+            st.session_state.start_time = time.time()
+        st.session_state.round_count += 1
+            
+        st.session_state.messages.append({"role": "user", "content": user_input, "image_url": None, "image_caption": None})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+            
+        with st.spinner("資深重症 NP 冷靜回應中..."):
+            try:
+                ai_output = call_gemini_trauma_api(user_input)
+                nurse_talk = ai_output.response_text
+                img_url = ai_output.image_url
+                img_caption = ai_output.image_caption
+            except Exception as e:
+                nurse_talk = f"⚠️ API 呼叫異常。詳細資訊：{str(e)}"
+                img_url, img_caption = None, None
+
+        if st.session_state.round_count >= 3 and "輸血" not in user_input and "mtp" not in user_input.lower() and "fluid" not in user_input.lower():
+            nurse_talk = "🚨 **（❗監測儀警報大作）嗶嗶嗶──重覆量測血壓降至 80/44 mmHg，心跳升至 135 次/分，病人意識變得更模糊（GCS 掉至 11 分），對聲音刺激反應變慢。醫師，請盡快下達明確處置！**\n（護理師提醒：病人休克加重，急需 Fluid Resuscitation 與交叉備血通知，且患肢未固定）"
+            img_url = "efast.jpg"
+            img_caption = "圖：急診床邊超音波(EFAST)腹腔內出血"
+
+        # 當前回應區防護
+        with st.chat_message("model"):
+            st.markdown(nurse_talk)
+            if img_url:
+                try:
+                    st.image(img_url, caption=img_caption, width=550)
+                except Exception:
+                    st.warning("⚠️ [臨床影像下載超時]")
+        
+        # 💡 縮排對齊校正（精確靠左對齊 8 個空格主線）
+        st.session_state.messages.append({
+            "role": "model", 
+            "content": nurse_talk,
+            "image_url": img_url,
+            "image_caption": img_caption
+        })
         st.rerun()
