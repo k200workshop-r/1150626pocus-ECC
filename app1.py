@@ -103,7 +103,7 @@ with st.sidebar:
     
     # 側邊欄靜態圖防護
     try:
-        st.image("trauma_scene.jpg", caption="ER Trauma Room", use_container_width=True)
+        st.image("trauma_scene.jpg", caption="車禍現場", use_container_width=True)
     except Exception:
         st.caption("⚠️ [側邊欄參考圖片載入中]")
 
