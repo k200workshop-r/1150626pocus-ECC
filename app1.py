@@ -89,14 +89,14 @@ def call_gemini_trauma_api(user_message: str) -> NurseResponse:
    - 若醫師說「建立點滴通路」/「給 Fluid」：你必須回應「收到，請問要建立幾條靜脈通路？使用幾號針頭？要跑什麼輸液以及流速多少？」
    - 若醫師說「安排 WBCT」/「排 Pan-CT」：
      - 文字：妳好的，放射科與傳送人員詢問，病人 NPO 狀態與交叉配對備血是否已在出發前確認？
-     - 【關鍵圖片觸發】：將 JSON 中的 image_url 設為 'https://upload.wikimedia.org/wikipedia/commons/4/4b/Computed_tomography_of_human_trunk.jpg' (WBCT示意)，並附上 image_caption。
+     - 【關鍵圖片觸發】：將 JSON 中的 image_url 設為 'pan_ct.jpg' (WBCT示意)。
    
 2. 利用生理數據惡化進行隱形施壓：
    - 如果住院醫師遲遲沒有下達大量補水復甦（Crystalloid/ Blood products）指令，每進行一輪（超過 3 輪對話），妳必須利用生理數據惡化進行隱形施壓，並將 trigger_crisis 設為 True。
 
 3. 施壓文字範例：
    - 文字：🚨 **嗶嗶嗶──重覆量測血壓降至 80/44 mmHg，心跳升至 135 次/分，病人意識變得更模糊...**。
-   - 【關鍵圖片觸發】：將 JSON 中的 image_url 設為 'https://upload.wikimedia.org/wikipedia/commons/e/ee/E-FAST_Examination.jpg' (EFast示意)，附上 image_caption「急診床邊超音波(EFAST)評估中：提示腹腔內可能積血與心包填塞跡象」。
+   - 【關鍵圖片觸發】：將 JSON 中的 image_url 設為 'efast.jpg' (EFast示意)，附上 image_caption「急診床邊超音波(EFAST)評估中：提示腹腔內可能積血與心包填塞跡象」。
 
 # Output Format
 必須嚴格遵守以下 JSON 格式輸出：
