@@ -100,7 +100,7 @@ def call_gemini_trauma_api(user_message: str) -> NurseResponse:
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-pro",
+        model="gemini-2.5-flash",
         contents=f"【學員當前對話輪數：{st.session_state.round_count}】學員指令：{user_message}",
         config=generate_content_config,
     )
