@@ -55,8 +55,8 @@ class NurseResponse(BaseModel):
     trigger_crisis: bool = Field(description="僅在生理數據惡化隱形施壓時為 true，其餘皆為 false")
     image_url: str = Field(
         default=None, 
-        description="""若學員查 Whole Body CT/WBCT/Pan-CT，填入 'https://upload.wikimedia.org/wikipedia/commons/4/4b/Computed_tomography_of_human_trunk.jpg'。
-                       若對話達3輪休克惡化施壓，填入 'https://upload.wikimedia.org/wikipedia/commons/e/ee/E-FAST_Examination.jpg' (示意EFast)。
+        description="""若學員查 Whole Body CT/WBCT/Pan-CT，填入 'pan_ct.jpg'。
+                       若對話達3輪休克惡化施壓，填入 'EFAST.gif' (示意EFast)。
                        其餘一般對話或學員無安排影像檢查請填空值 None。"""
     )
     image_caption: str = Field(
@@ -225,7 +225,10 @@ else:
             st.markdown(nurse_talk)
             # 🖼️ 【圖片放置點：對話動態圖檔觸發機制】
             if img_url:
-                st.image(img_url, caption=img_caption, width=550)
+            try:
+    st.image(img_url, caption=img_caption, width=550)
+            except Exception:
+    st.warning("⚠️ [臨床影像下載超時，系統已自動防護攔截，不影響網頁運作]")
         
         # 5. 將文字、圖片網址存入歷史紀錄狀態中，確保在 20 分鐘時間到之前不會遺失
         st.session_state.messages.append({
