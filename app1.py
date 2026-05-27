@@ -223,14 +223,13 @@ else:
         # 4. 顯示護理師回應文字與動態觸發的醫學影像
         with st.chat_message("model"):
             st.markdown(nurse_talk)
-            # 🖼️ 【圖片放置點：對話動態圖檔觸發機制】
+with st.chat_message("model"):
+            st.markdown(nurse_talk)
             if img_url:
-            try:
-    st.image(img_url, caption=img_caption, width=550)
-            except Exception:
-    st.warning("⚠️ [臨床影像下載超時，系統已自動防護攔截，不影響網頁運作]")
-        
-        # 5. 將文字、圖片網址存入歷史紀錄狀態中，確保在 20 分鐘時間到之前不會遺失
+                try:  #  往右對齊縮排！屬於 if 的範圍
+                    st.image(img_url, caption=img_caption, width=550)
+                except Exception:  #  同樣要往右對齊縮排！
+                    st.warning("⚠️ [臨床影像下載超時，系統已自動防護攔截，不影響網頁運作]")
         st.session_state.messages.append({
             "role": "model", 
             "content": nurse_talk,
