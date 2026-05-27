@@ -90,18 +90,18 @@ system_instruction = """# Role
   "image_caption": null
 }
 """
-    generate_content_config = types.GenerateContentConfig(
+generate_content_config = types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(thinking_budget=-1),
         temperature=0.35,
         response_mime_type="application/json",
         response_schema=NurseResponse,
         system_instruction=system_instruction
-    )
-    response = client.models.generate_content(
+)
+response = client.models.generate_content(
         model="gemini-2.5-pro",
         contents=f"【學員當前對話輪數：{st.session_state.round_count}】學員指令：{user_message}",
         config=generate_content_config,
-    )
+)
     return NurseResponse.model_validate_json(response.text)
 
 # ─── 📋 側邊欄配置 ───
