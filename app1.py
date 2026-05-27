@@ -78,4 +78,6 @@ def call_gemini_trauma_api(user_message: str) -> NurseResponse:
 with st.sidebar:
     st.header("⏳ 搶救黃金時間")
     timer_placeholder = st.empty()  
-    if st.button("🔄 開始新回合", use_container
+    if st.button("🔄 開始新回合", use_container_width=True):
+        reset_simulation()
+        st.rerun()
