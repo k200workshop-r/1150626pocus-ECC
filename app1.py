@@ -223,13 +223,13 @@ else:
         # 4. 顯示護理師回應文字與動態觸發的醫學影像
         with st.chat_message("model"):
             st.markdown(nurse_talk)
-with st.chat_message("model"):
+        with st.chat_message("model"):
             st.markdown(nurse_talk)
-            if img_url:
-                try:  #  往右對齊縮排！屬於 if 的範圍
-                    st.image(img_url, caption=img_caption, width=550)
-                except Exception:  #  同樣要往右對齊縮排！
-                    st.warning("⚠️ [臨床影像下載超時，系統已自動防護攔截，不影響網頁運作]")
+        if img_url:
+            try:  #  往右對齊縮排！屬於 if 的範圍
+                st.image(img_url, caption=img_caption, width=550)
+            except Exception:  #  同樣要往右對齊縮排！
+                st.warning("⚠️ [臨床影像下載超時，系統已自動防護攔截，不影響網頁運作]")
         st.session_state.messages.append({
             "role": "model", 
             "content": nurse_talk,
