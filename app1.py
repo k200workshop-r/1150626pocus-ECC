@@ -119,4 +119,4 @@ else:
                 ai_output = call_gemini_trauma_api(user_input)
                 nurse_talk = ai_output.response_text
             except Exception as e:
-                nurse_talk = f"⚠️ 呼叫失敗
+                nurse_talk = f"⚠️ API 呼叫異常。詳細資訊：{str(e)}"
