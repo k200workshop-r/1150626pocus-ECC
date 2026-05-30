@@ -11,7 +11,7 @@ from PIL import Image
 st.set_page_config(page_title="急重症情境模擬", layout="wide")
 st.title("🚑 臨床情境模擬：急重症搶救室 (Trauma Room)")
 
-# ─── 🔑 GEMINI API 安全設定 (💡 修正點 1：解除醫療血腥關鍵字阻擋) ───
+# ─── 🔑 GEMINI API 安全設定 ───
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -31,24 +31,21 @@ TOTAL_SECONDS = 20 * 60  # 20 分鐘 = 1200 秒
 
 if "start_time_er" not in st.session_state:
     st.session_state.start_time_er = None  
-if "time_up_er" not in st.session_state:
-    st.session_state.time_up_er = False
 if "is_generating" not in st.session_state:
     st.session_state.is_generating = False
-# 💡 修正點 2：新增暫存區，用於「兩步重整法」
 if "pending_input" not in st.session_state:
     st.session_state.pending_input = None
 
+# 💡 重置函數：負責把所有狀態與對話「徹底洗白」
 def reset_simulation_state():
     st.session_state.start_time_er = None  
-    st.session_state.time_up_er = False
     st.session_state.is_generating = False
     st.session_state.pending_input = None
     st.session_state.er_messages = [
         {"role": "model", "content": (
             "護理師 Mason 回報：\n"
             "「醫師！學長姐剛把病人推入重症急救室！46歲女性車禍外傷、血壓很低（88/52）、心跳快（125），看起來是嚴重的出血性休克，左大腿有明顯開放性畸形。目前系統靜止中。"
-            "**請輸入你的第一步醫囑**」"
+            "**請輸入你的醫囑**」"
         )}
     ]
 
@@ -60,14 +57,15 @@ if st.session_state.start_time_er is not None:
     elapsed_time = time.time() - st.session_state.start_time_er
     remaining_time = max(0, TOTAL_SECONDS - elapsed_time)
     
+    # 💡 修改點 1：20分鐘一到，不再鎖死畫面，而是彈出提示並「自動重新開始」
     if remaining_time <= 0:
-        st.session_state.time_up_er = True
-        st.session_state.er_messages = [
-            {"role": "model", "content": "🚨 **【系統提示：20分鐘搶救時間已到！】** 病人因嚴重出血性休克未得到及時復甦，生命徵象停止。請點擊側邊欄的『🔄 新回合』按鈕再次挑戰。"}
-        ]
+        st.toast("🚨 20分鐘搶救時間已到！系統自動清除紀錄並重新開始。", icon="🚨")
+        time.sleep(1.5)  # 稍微停頓讓玩家看到提示
+        reset_simulation_state()
+        st.rerun()
     
-    # 💡 核心防禦：如果 AI 正在思考，我們「徹底不渲染」計時器元件，讓前端停止發送干擾請求
-    if remaining_time > 0 and not st.session_state.time_up_er:
+    # 如果還沒超時且 AI 不在思考，才繼續倒數計時
+    if remaining_time > 0:
         if not st.session_state.is_generating:
             st_autorefresh(interval=1000, key="er_countdown_timer")
 else:
@@ -84,15 +82,16 @@ with st.sidebar:
     if st.session_state.start_time_er is None:
         timer_placeholder.metric(label="📝 請下第一個指令", value="20:00")
     elif remaining_time > 300: 
-        timer_placeholder.metric(label="剩餘搶救時間", value=time_str)
+        timer_placeholder.metric(label="⏱️ 剩餘搶救時間", value=time_str)
     elif remaining_time > 0: 
         timer_placeholder.metric(label="🚨 警告：時間即將耗盡", value=time_str, delta="-時間危急", delta_color="inverse")
-    else:
-        timer_placeholder.metric(label="⏱️ 搶救時間結束", value="00:00", delta="-評估超時", delta_color="inverse")
     
     st.divider()
     
+    # 💡 修改點 2：手動按鈕也能觸發完整的洗白與重置
     if st.button("🔄 新回合", use_container_width=True, type="primary"):
+        st.toast("🔄 系統已重置，開啟新回合！", icon="✅")
+        time.sleep(0.5)
         reset_simulation_state()
         st.rerun()
 
@@ -118,7 +117,7 @@ def call_ai_clinical_advisor(user_command, history_context):
     
     請精確分析醫師最新輸入的指令，並嚴格以 JSON 格式輸出以下兩個欄位，不要包含任何額外的 Markdown 標籤：
     {
-      "response_text": "（你扮演護理師，針對醫師最新和過往的指令做出專業且合宜的回應。語氣要帶有緊迫感，動態報告生命徵象）",
+      "response_text": "（你扮演護理師，針對醫師當前和過往指令做出專業且適宜的回應，且不要引導。語氣要帶有緊迫感，隨時報告生命徵象）",
       "image_urls": ["trauma_scene.jpg", "trauma_room.jpg", "trauma_ct.jpg", "pelvic_bruising.jpg", "chest_bruising.jpg", "pan_ct.jpg", "efast.jpg"]
     }
     
@@ -163,7 +162,7 @@ def call_ai_clinical_advisor(user_command, history_context):
         return ai_response, img_list
 
     except Exception as e:
-        print(f"API 錯誤: {e}") # 幫助你在終端機找錯誤
+        print(f"API 錯誤: {e}") 
         return f"⚠️ [系統提示] 執行『{user_command}』時發生網路延遲或格式錯誤，請再試一次。", []
 
 # ─── 主畫面：對話紀錄渲染 ───
@@ -185,24 +184,22 @@ for msg in st.session_state.er_messages:
                             except:
                                 pass
                         else:
-                            st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，但資料夾內缺少該圖檔]")
+                            st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，可惜本案非真實個案，提供圖有限]")
 
 # ─── 住院醫師輸入區 ───
-if st.session_state.time_up_er:
-    st.chat_input("⏱️ 20分鐘搶救時間已結束！", disabled=True, key="er_chat_key")
+# 💡 修改點 3：因為超時會自動重置，所以移除了原本「鎖死聊天室」的狀態
+if not st.session_state.is_generating:
+    if user_input := st.chat_input("請輸入緊急處置、藥物、輸血或影像醫囑...", key="er_chat_key"):
+        if st.session_state.start_time_er is None:
+            st.session_state.start_time_er = time.time()
+            
+        # 兩步法【第一步】：不要在這裡呼叫 AI！先把對話存起來，然後「立刻重整」以卸載計時器！
+        st.session_state.pending_input = user_input
+        st.session_state.is_generating = True
+        st.rerun() 
 else:
-    # 只有在沒有生圖時，才允許使用者輸入
-    if not st.session_state.is_generating:
-        if user_input := st.chat_input("請輸入緊急處置、藥物、輸血或影像醫囑...", key="er_chat_key"):
-            if st.session_state.start_time_er is None:
-                st.session_state.start_time_er = time.time()
-                
-            # 💡 兩步法【第一步】：不要在這裡呼叫 AI！先把對話存起來，然後「立刻重整」以卸載計時器！
-            st.session_state.pending_input = user_input
-            st.session_state.is_generating = True
-            st.rerun() 
-    else:
-        st.chat_input("急救中...", disabled=True, key="er_chat_disabled")
+    # 這是為了在 AI 思考期間（那 3~5 秒鐘），防呆不讓使用者繼續狂按
+    st.chat_input("急救中...", disabled=True, key="er_chat_disabled")
 
 # ─── 💡 兩步法【第二步】：安全區塊，此時計時器已被徹底關閉，AI 可以安心思考 ───
 if st.session_state.pending_input:
@@ -213,7 +210,7 @@ if st.session_state.pending_input:
     with st.chat_message("user"):
         st.markdown(user_text)
         
-    # 2. 呼叫 AI 進行運算（因為沒有計時器干擾，等 10 秒都不會中斷）
+    # 2. 呼叫 AI 進行運算
     with st.spinner("急救中..."):
         context_list = [f"{m['role']}: {m['content']}" for m in st.session_state.er_messages[-4:]]
         history_string = "\n".join(context_list)
