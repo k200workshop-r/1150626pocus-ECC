@@ -177,7 +177,14 @@ def call_ai_clinical_advisor(user_command, history_context):
         if not ai_response:
             ai_response = f"收到醫囑：『{user_command}』。醫師，請下達進一步指示！"
             
+        # 🛡️ 雙向保險機制：不管是單數 image_url 還是複數 image_urls，通通接起來！
         img_list = data.get("image_urls", [])
+        if not img_list:  # 如果複數沒抓到，嘗試抓單數
+            single_url = data.get("image_url", None)
+            if single_url:
+                img_list = [single_url]
+                
+        # 確保最後一定是 clean 的 list 格式
         if isinstance(img_list, str):
             img_list = [img_list]
         if not isinstance(img_list, list):
