@@ -200,4 +200,3 @@ else:
             "image_urls": img_urls if isinstance(img_urls, list) else []
         })
         
-        st.rerun()
