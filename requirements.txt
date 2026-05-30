@@ -1,4 +1,2 @@
-streamlit
-google-genai
-pydantic
 streamlit-autorefresh
+google-generativeai
