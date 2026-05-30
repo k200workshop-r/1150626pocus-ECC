@@ -107,15 +107,24 @@ with st.sidebar:
         except:
             pass
 
-# ─── 主畫面：對話紀錄渲染 ───
-for msg in st.session_state.er_messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# ─── 主畫面：對話紀錄渲染（🛡️ 檔名安全過濾版） ───
         if "image_urls" in msg and msg["image_urls"]:
-            # 如果是複數張圖片，用橫向（或縱向）呈現
-            for single_url in msg["image_urls"]:
-                if os.path.exists(single_url):
-                    st.image(single_url, caption=f"臨床影像: {single_url}", width=400)
+            urls = msg["image_urls"]
+            if isinstance(urls, str):
+                urls = [urls]
+                
+            if isinstance(urls, list):
+                for single_url in urls:
+                    clean_url = str(single_url).strip()
+                    
+                    # 💡 核心安全過濾：只有副檔名是 jpg/png，且不含中文字的才允許執行
+                    if any(clean_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png']) and not re.search(r'[\u4e00-\u9fa5]', clean_url):
+                        if os.path.exists(clean_url):
+                            try:
+                                with Image.open(clean_url) as img:
+                                    st.image(clean_url, caption=f"臨床影像: {clean_url}", width=400)
+                            except:
+                                pass
 
 # ─── 🤖 AI 智慧臨床核心調用 ───
 def call_ai_clinical_advisor(user_command, history_context):
@@ -205,14 +214,18 @@ else:
             
             if isinstance(img_urls, list):
                 for url in img_urls:
-                    if url and os.path.exists(str(url)):
-                        try:
-                            with Image.open(str(url)) as img:
-                                st.image(str(url), caption=f"臨床影像: {url}", width=500)
-                        except:
-                            pass
-                    else:
-                        st.caption(f"ℹ️ [系統提示：很抱歉，我非實際案例能提供的不多，這些圖片是我的極限了...")
+                    clean_url = str(url).strip()
+                    
+                    # 💡 核心安全過濾：防禦 Gemini 亂吐中文到圖片路徑裡
+                    if any(clean_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png']) and not re.search(r'[\u4e00-\u9fa5]', clean_url):
+                        if os.path.exists(clean_url):
+                            try:
+                                with Image.open(clean_url) as img:
+                                    st.image(clean_url, caption=f"臨床影像: {clean_url}", width=500)
+                            except:
+                                pass
+                        else:
+                            st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，但本案例非真實個案無更多圖檔]")
 
         # 將結果與強制轉型後的清單存入歷史紀錄
         st.session_state.er_messages.append({
