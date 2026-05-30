@@ -27,16 +27,20 @@ if "start_time_er" not in st.session_state:
     st.session_state.start_time_er = None  
 if "time_up_er" not in st.session_state:
     st.session_state.time_up_er = False
+# 💡 新增：用來判斷 AI 是否正在生成的狀態鎖
+if "is_generating" not in st.session_state:
+    st.session_state.is_generating = False
 
 # 初始化對話紀錄與狀態
 def reset_simulation_state():
     st.session_state.start_time_er = None  
     st.session_state.time_up_er = False
+    st.session_state.is_generating = False
     st.session_state.er_messages = [
         {"role": "model", "content": (
             "護理師 Mason 回報：\n"
             "「醫師！學長姐剛把病人推入重症急救室！46歲女性車禍外傷、血壓很低（88/52）、心跳快（125），看起來是嚴重的出血性休克，左大腿有明顯開放性畸形。目前系統靜止中。"
-            "**請輸入你的醫囑**」"
+            "**請輸入你的第一步醫囑**」"
         )}
     ]
 
@@ -54,10 +58,11 @@ if st.session_state.start_time_er is not None:
             {"role": "model", "content": "🚨 **【系統提示：20分鐘搶救時間已到！】** 病人因嚴重出血性休克未得到及時復甦，生命徵象停止。請點擊側邊欄的『🔄 新回合』按鈕再次挑戰。"}
         ]
     
+    # 💡 核心修正：只有在「時間未到」且「AI 不在生成中」時，才啟動每秒重整
     if remaining_time > 0 and not st.session_state.time_up_er:
-        st_autorefresh(interval=1000, key="er_countdown_timer")
+        if not st.session_state.is_generating:
+            st_autorefresh(interval=1000, key="er_countdown_timer")
 else:
-    # 尚未開始計時的預設值
     remaining_time = TOTAL_SECONDS
 
 # ─── 📋 側邊欄（計時器、病人資料、重新開始按鈕） ───
@@ -65,7 +70,6 @@ with st.sidebar:
     st.header("⏳ 搶救時間")
     timer_placeholder = st.empty()
     
-    # 呈現倒數計時格式
     mins, secs = divmod(int(remaining_time), 60)
     time_str = f"{mins:02d}:{secs:02d}"
     
@@ -80,7 +84,6 @@ with st.sidebar:
     
     st.divider()
     
-    # 「重新開始」按鈕機制
     if st.button("🔄 新回合", use_container_width=True, type="primary"):
         reset_simulation_state()
         st.rerun()
@@ -107,12 +110,11 @@ with st.sidebar:
         except:
             pass
 
-# ─── 主畫面：對話紀錄渲染（🛡️ 完整迴圈防禦版） ───
+# ─── 主畫面：對話紀錄渲染 ───
 for msg in st.session_state.er_messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         
-        # ✅ 已修正縮排：確保這些判斷完全在 `with` 與 `for` 迴圈之內
         if "image_urls" in msg and msg["image_urls"]:
             urls = msg["image_urls"]
             if isinstance(urls, str):
@@ -122,7 +124,6 @@ for msg in st.session_state.er_messages:
                 for single_url in urls:
                     clean_url = str(single_url).strip()
                     
-                    # 安全過濾：只有副檔名正確且不含中文字的才允許執行
                     if any(clean_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png']) and not re.search(r'[\u4e00-\u9fa5]', clean_url):
                         if os.path.exists(clean_url):
                             try:
@@ -130,17 +131,19 @@ for msg in st.session_state.er_messages:
                                     st.image(clean_url, caption=f"臨床影像: {clean_url}", width=400)
                             except:
                                 pass
+                        else:
+                            # 如果圖片檔不存在於資料夾中，給予提示
+                            st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，但本案例非真實個案無更多圖檔]")
 
 # ─── 🤖 AI 智慧臨床核心調用 ───
 def call_ai_clinical_advisor(user_command, history_context):
-    # ✅ 修正了 JSON Prompt 格式，關閉了陣列與物件括號，確保 AI 回傳合法 JSON
     system_prompt = """
     你是一位資深的急重症護理師 Mason。
     目前病人病況：46歲女性車禍外傷，高度懷疑「出血性休克（骨盆骨折及腹腔內大出血）」與「左大腿骨折」。
     
     請精確分析醫師最新輸入的指令，並嚴格以 JSON 格式輸出以下兩個欄位，不要包含任何額外的 Markdown 標籤：
     {
-      "response_text": "（你扮演護理師，針對醫師最新指令做出的專業回應。語氣要帶有急診室的緊迫感，並動態報告最新的生命徵象數字變化）",
+      "response_text": "（你扮演護理師，針對醫師當前和過往指令做出專業且合宜的回應。語氣要帶有急診室的緊迫感，並動態報告最新的生命徵象數字變化）",
       "image_urls": ["trauma_scene.jpg", "trauma_room.jpg", "trauma_ct.jpg", "pelvic_bruising.jpg", "chest_bruising.jpg", "pan_ct.jpg", "efast.jpg"]
     }
     
@@ -161,7 +164,6 @@ def call_ai_clinical_advisor(user_command, history_context):
             generation_config={"response_mime_type": "application/json"}
         )
         
-        # 🛡️ 核心安全檢查
         res_data = response.text
         
         if isinstance(res_data, str):
@@ -174,7 +176,6 @@ def call_ai_clinical_advisor(user_command, history_context):
         else:
             data = {}
 
-        # 擷取對話與圖片清單
         ai_response = data.get("response_text", "")
         if not ai_response:
             ai_response = f"收到醫囑：『{user_command}』。醫師，請下達進一步指示！"
@@ -185,7 +186,6 @@ def call_ai_clinical_advisor(user_command, history_context):
             if single_url:
                 img_list = [single_url]
                 
-        # 確保最後一定是 clean 的 list 格式
         if isinstance(img_list, str):
             img_list = [img_list]
         if not isinstance(img_list, list):
@@ -196,11 +196,14 @@ def call_ai_clinical_advisor(user_command, history_context):
     except Exception as e:
         return f"醫師，你下達的『{user_command}』指令，急診團隊已執行中，請下達下一步醫囑。", []
 
-# ─── 住院醫師（使用者）輸入區（🔥 強制轉型完美防禦版） ───
+# ─── 住院醫師（使用者）輸入區 ───
 if st.session_state.time_up_er:
     st.chat_input("⏱️ 20分鐘搶救時間已結束！", disabled=True, key="er_chat_key")
 else:
     if user_input := st.chat_input("請輸入緊急處置、藥物、輸血或影像醫囑...", key="er_chat_key"):
+        
+        # 💡 鎖定狀態：告訴系統 AI 正在生成，暫停上方計時器的每秒重新整理！
+        st.session_state.is_generating = True 
         
         if st.session_state.start_time_er is None:
             st.session_state.start_time_er = time.time()
@@ -218,7 +221,6 @@ else:
         if isinstance(img_urls, str):
             img_urls = [img_urls]
 
-        # 渲染 AI 回應文字
         with st.chat_message("model"):
             st.markdown(ai_response)
             
@@ -236,9 +238,12 @@ else:
                         else:
                             st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，但本案例非真實個案無更多圖檔]")
 
-        # 將結果與強制轉型後的清單存入歷史紀錄
         st.session_state.er_messages.append({
             "role": "model", 
             "content": ai_response,
             "image_urls": img_urls if isinstance(img_urls, list) else []
         })
+        
+        # 💡 解除鎖定並強制重整：AI 回覆完畢，重新啟動計時器
+        st.session_state.is_generating = False
+        st.rerun()
