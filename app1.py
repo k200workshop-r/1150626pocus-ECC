@@ -130,8 +130,8 @@ def call_ai_clinical_advisor(user_command, history_context):
     }
     
     可調用的影像檔名清單：
-    - 'efast.jpg' (超音波 / FAST 影像)
-    - 'trauma_ct.jpg', 'pan_ct.jpg' (骨盆腔 / X光 / Pelvis X光)
+    - 'efast.jpg' (超音波 / FAST 影像 / POCUS)
+    - 'trauma_ct.jpg', 'pan_ct.jpg' (骨盆腔 / X光 / Pelvis X光 / CT)
 
     多圖觸發範例：
     - 如果學員說：「排常規外傷影像檢查，做 FAST 和照 Pelvis X光」 -> 你的 image_urls 應填入 ['trauma_ct.jpg', 'pan_ct.jpg']
