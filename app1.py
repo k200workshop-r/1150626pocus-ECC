@@ -11,31 +11,39 @@ from PIL import Image
 st.set_page_config(page_title="急重症情境模擬", layout="wide")
 st.title("🚑 臨床情境模擬：急重症搶救室 (Trauma Room)")
 
-# ─── 🔑 GEMINI API 安全設定 ───
+# ─── 🔑 GEMINI API 安全設定 (💡 修正點 1：解除醫療血腥關鍵字阻擋) ───
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
     genai.configure(api_key=os.environ.get("GEMINI_API_KEY", "YOUR_FALLBACK_KEY"))
 
-model = genai.GenerativeModel('gemini-2.5-flash')
+# 降低安全閾值，避免 AI 遇到「大出血、骨折」等創傷詞彙拒絕回答
+safety_settings = {
+    "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"
+}
+model = genai.GenerativeModel('gemini-2.5-flash', safety_settings=safety_settings)
 
 # ─── ⏱️ 20分鐘限時核心系統與初始化 ───
 TOTAL_SECONDS = 20 * 60  # 20 分鐘 = 1200 秒
 
-# 初始化狀態
 if "start_time_er" not in st.session_state:
     st.session_state.start_time_er = None  
 if "time_up_er" not in st.session_state:
     st.session_state.time_up_er = False
-# 💡 新增：用來判斷 AI 是否正在生成的狀態鎖
 if "is_generating" not in st.session_state:
     st.session_state.is_generating = False
+# 💡 修正點 2：新增暫存區，用於「兩步重整法」
+if "pending_input" not in st.session_state:
+    st.session_state.pending_input = None
 
-# 初始化對話紀錄與狀態
 def reset_simulation_state():
     st.session_state.start_time_er = None  
     st.session_state.time_up_er = False
     st.session_state.is_generating = False
+    st.session_state.pending_input = None
     st.session_state.er_messages = [
         {"role": "model", "content": (
             "護理師 Mason 回報：\n"
@@ -58,14 +66,14 @@ if st.session_state.start_time_er is not None:
             {"role": "model", "content": "🚨 **【系統提示：20分鐘搶救時間已到！】** 病人因嚴重出血性休克未得到及時復甦，生命徵象停止。請點擊側邊欄的『🔄 新回合』按鈕再次挑戰。"}
         ]
     
-    # 💡 核心修正：只有在「時間未到」且「AI 不在生成中」時，才啟動每秒重整
+    # 💡 核心防禦：如果 AI 正在思考，我們「徹底不渲染」計時器元件，讓前端停止發送干擾請求
     if remaining_time > 0 and not st.session_state.time_up_er:
         if not st.session_state.is_generating:
             st_autorefresh(interval=1000, key="er_countdown_timer")
 else:
     remaining_time = TOTAL_SECONDS
 
-# ─── 📋 側邊欄（計時器、病人資料、重新開始按鈕） ───
+# ─── 📋 側邊欄 ───
 with st.sidebar:
     st.header("⏳ 搶救時間")
     timer_placeholder = st.empty()
@@ -101,39 +109,6 @@ with st.sidebar:
         "- 呼吸 (RR): 24 次/分\n"
         "- 血氧 (SpO2): 94%"
     )
-    
-    img_path_er = "trauma_scene.jpg"
-    if os.path.exists(img_path_er):
-        try:
-            with Image.open(img_path_er) as img:
-                st.image(img_path_er, width="stretch")
-        except:
-            pass
-
-# ─── 主畫面：對話紀錄渲染 ───
-for msg in st.session_state.er_messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        
-        if "image_urls" in msg and msg["image_urls"]:
-            urls = msg["image_urls"]
-            if isinstance(urls, str):
-                urls = [urls]
-                
-            if isinstance(urls, list):
-                for single_url in urls:
-                    clean_url = str(single_url).strip()
-                    
-                    if any(clean_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png']) and not re.search(r'[\u4e00-\u9fa5]', clean_url):
-                        if os.path.exists(clean_url):
-                            try:
-                                with Image.open(clean_url) as img:
-                                    st.image(clean_url, caption=f"臨床影像: {clean_url}", width=400)
-                            except:
-                                pass
-                        else:
-                            # 如果圖片檔不存在於資料夾中，給予提示
-                            st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，但本案例非真實個案無更多圖檔]")
 
 # ─── 🤖 AI 智慧臨床核心調用 ───
 def call_ai_clinical_advisor(user_command, history_context):
@@ -143,7 +118,7 @@ def call_ai_clinical_advisor(user_command, history_context):
     
     請精確分析醫師最新輸入的指令，並嚴格以 JSON 格式輸出以下兩個欄位，不要包含任何額外的 Markdown 標籤：
     {
-      "response_text": "（你扮演護理師，針對醫師當前和過往指令做出專業且合宜的回應。語氣要帶有急診室的緊迫感，並動態報告最新的生命徵象數字變化）",
+      "response_text": "（你扮演護理師，針對醫師最新和過往的指令做出專業且合宜的回應。語氣要帶有緊迫感，動態報告生命徵象）",
       "image_urls": ["trauma_scene.jpg", "trauma_room.jpg", "trauma_ct.jpg", "pelvic_bruising.jpg", "chest_bruising.jpg", "pan_ct.jpg", "efast.jpg"]
     }
     
@@ -152,18 +127,14 @@ def call_ai_clinical_advisor(user_command, history_context):
     - 'trauma_ct.jpg', 'pan_ct.jpg' (骨盆腔 / X光 / Pelvis X光 / CT / 電腦斷層 / Pan-scan)
 
     多圖觸發範例：
-    - 如果學員說：「排常規外傷影像檢查，做 FAST 和照 Pelvis X光」 -> 你的 image_urls 應填入 ["trauma_ct.jpg", "pan_ct.jpg"]
-    - 如果學員下達多重檢查指令 -> 自由組合陣列。
+    - 如果學員說：「做 FAST 和照 Pelvis X光」 -> 應填入 ["efast.jpg", "trauma_ct.jpg"]
+    - 自由組合陣列。
     """
     
     full_prompt = f"{system_prompt}\n\n對話歷史：\n{history_context}\n\n住院醫師最新指令：\"{user_command}\"\n請輸出合規的 JSON："
     
     try:
-        response = model.generate_content(
-            full_prompt,
-            generation_config={"response_mime_type": "application/json"}
-        )
-        
+        response = model.generate_content(full_prompt, generation_config={"response_mime_type": "application/json"})
         res_data = response.text
         
         if isinstance(res_data, str):
@@ -181,10 +152,8 @@ def call_ai_clinical_advisor(user_command, history_context):
             ai_response = f"收到醫囑：『{user_command}』。醫師，請下達進一步指示！"
             
         img_list = data.get("image_urls", [])
-        if not img_list:  
-            single_url = data.get("image_url", None)
-            if single_url:
-                img_list = [single_url]
+        if not img_list and data.get("image_url"):  
+            img_list = [data.get("image_url")]
                 
         if isinstance(img_list, str):
             img_list = [img_list]
@@ -194,56 +163,71 @@ def call_ai_clinical_advisor(user_command, history_context):
         return ai_response, img_list
 
     except Exception as e:
-        return f"醫師，你下達的『{user_command}』指令，急診團隊已執行中，請下達下一步醫囑。", []
+        print(f"API 錯誤: {e}") # 幫助你在終端機找錯誤
+        return f"⚠️ [系統提示] 執行『{user_command}』時發生網路延遲或格式錯誤，請再試一次。", []
 
-# ─── 住院醫師（使用者）輸入區 ───
-if st.session_state.time_up_er:
-    st.chat_input("⏱️ 20分鐘搶救時間已結束！", disabled=True, key="er_chat_key")
-else:
-    if user_input := st.chat_input("請輸入緊急處置、藥物、輸血或影像醫囑...", key="er_chat_key"):
+# ─── 主畫面：對話紀錄渲染 ───
+for msg in st.session_state.er_messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
         
-        # 💡 鎖定狀態：告訴系統 AI 正在生成，暫停上方計時器的每秒重新整理！
-        st.session_state.is_generating = True 
-        
-        if st.session_state.start_time_er is None:
-            st.session_state.start_time_er = time.time()
-            
-        st.session_state.er_messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-            
-        context_list = [f"{m['role']}: {m['content']}" for m in st.session_state.er_messages[-4:]]
-        history_string = "\n".join(context_list)
-        
-        with st.spinner("急救團隊執行醫囑中..."):
-            ai_response, img_urls = call_ai_clinical_advisor(user_input, history_string)
-
-        if isinstance(img_urls, str):
-            img_urls = [img_urls]
-
-        with st.chat_message("model"):
-            st.markdown(ai_response)
-            
-            if isinstance(img_urls, list):
-                for url in img_urls:
-                    clean_url = str(url).strip()
-                    
+        if "image_urls" in msg and msg["image_urls"]:
+            urls = msg["image_urls"]
+            if isinstance(urls, str): urls = [urls]
+            if isinstance(urls, list):
+                for single_url in urls:
+                    clean_url = str(single_url).strip()
                     if any(clean_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png']) and not re.search(r'[\u4e00-\u9fa5]', clean_url):
                         if os.path.exists(clean_url):
                             try:
                                 with Image.open(clean_url) as img:
-                                    st.image(clean_url, caption=f"臨床影像: {clean_url}", width=500)
+                                    st.image(clean_url, caption=f"臨床影像: {clean_url}", width=400)
                             except:
                                 pass
                         else:
-                            st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，但本案例非真實個案無更多圖檔]")
+                            st.caption(f"ℹ️ [系統提示：模擬團隊回傳了 '{clean_url}' 影像，但資料夾內缺少該圖檔]")
 
-        st.session_state.er_messages.append({
-            "role": "model", 
-            "content": ai_response,
-            "image_urls": img_urls if isinstance(img_urls, list) else []
-        })
+# ─── 住院醫師輸入區 ───
+if st.session_state.time_up_er:
+    st.chat_input("⏱️ 20分鐘搶救時間已結束！", disabled=True, key="er_chat_key")
+else:
+    # 只有在沒有生圖時，才允許使用者輸入
+    if not st.session_state.is_generating:
+        if user_input := st.chat_input("請輸入緊急處置、藥物、輸血或影像醫囑...", key="er_chat_key"):
+            if st.session_state.start_time_er is None:
+                st.session_state.start_time_er = time.time()
+                
+            # 💡 兩步法【第一步】：不要在這裡呼叫 AI！先把對話存起來，然後「立刻重整」以卸載計時器！
+            st.session_state.pending_input = user_input
+            st.session_state.is_generating = True
+            st.rerun() 
+    else:
+        st.chat_input("急救中...", disabled=True, key="er_chat_disabled")
+
+# ─── 💡 兩步法【第二步】：安全區塊，此時計時器已被徹底關閉，AI 可以安心思考 ───
+if st.session_state.pending_input:
+    user_text = st.session_state.pending_input
+    
+    # 1. 立即把醫師的指令印在畫面上
+    st.session_state.er_messages.append({"role": "user", "content": user_text})
+    with st.chat_message("user"):
+        st.markdown(user_text)
         
-        # 💡 解除鎖定並強制重整：AI 回覆完畢，重新啟動計時器
-        st.session_state.is_generating = False
-        st.rerun()
+    # 2. 呼叫 AI 進行運算（因為沒有計時器干擾，等 10 秒都不會中斷）
+    with st.spinner("急救中..."):
+        context_list = [f"{m['role']}: {m['content']}" for m in st.session_state.er_messages[-4:]]
+        history_string = "\n".join(context_list)
+        
+        ai_response, img_urls = call_ai_clinical_advisor(user_text, history_string)
+
+    # 3. 儲存 AI 回覆與圖片
+    st.session_state.er_messages.append({
+        "role": "model", 
+        "content": ai_response,
+        "image_urls": img_urls if isinstance(img_urls, list) else []
+    })
+    
+    # 4. 解除鎖定，清空暫存，再次重整以「重新掛載啟動計時器」並顯示最新對話
+    st.session_state.pending_input = None
+    st.session_state.is_generating = False
+    st.rerun()
