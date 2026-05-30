@@ -155,9 +155,9 @@ def call_ai_clinical_advisor(user_command, history_context):
     except Exception as e:
         return f"收到醫囑：『{user_command}』，團隊正加緊處理中！", []
 
-# ─── 住院醫師（使用者）輸入區 ───
+# ─── 住院醫師（使用者）輸入區（🔥 強制轉型完美防禦版） ───
 if st.session_state.time_up_er:
-    st.chat_input("⏱️ 20分鐘搶救時間已結束！請點擊側邊欄按鈕重新開始。", disabled=True, key="er_chat_key")
+    st.chat_input("⏱️ 20分鐘搶救時間已結束！", disabled=True, key="er_chat_key")
 else:
     if user_input := st.chat_input("請輸入緊急處置、藥物、輸血或影像醫囑...", key="er_chat_key"):
         
@@ -174,41 +174,30 @@ else:
         with st.spinner("急救團隊執行醫囑中..."):
             ai_response, img_urls = call_ai_clinical_advisor(user_input, history_string)
 
-        # 💡 重大修正 1：不要在這邊把檔名刪掉！不管是真是假，先把它們記錄下來
-        # 我們只在「畫面上渲染」時去做安全檢查，這樣對話紀錄絕對不會平白無故失蹤。
-        
+        # 🛡️ 核心防禦：在新對話渲染時，同樣確保 img_urls 是 List
+        if isinstance(img_urls, str):
+            img_urls = [img_urls]
+
         # 渲染 AI 回應文字
         with st.chat_message("model"):
             st.markdown(ai_response)
             
-            # 如果 AI 有給圖片檔名，我們在畫面上嘗試秀出來
-            if img_urls:
+            if isinstance(img_urls, list):
                 for url in img_urls:
-                    # 如果圖片真實存在，用完美格式畫出來
-                    if os.path.exists(url):
+                    if url and os.path.exists(str(url)):
                         try:
-                            with Image.open(url) as img:
-                                st.image(url, caption=f"臨床影像: {url}", width=500)
+                            with Image.open(str(url)) as img:
+                                st.image(str(url), caption=f"臨床影像: {url}", width=500)
                         except:
                             pass
                     else:
-                        # 💡 重大修正 2：如果圖片不存在，不要崩潰，給一行溫馨提示就好，不影響對話繼續！
-                        st.caption(f"ℹ️ [系統提示：我不夠聰明，沒有實體影像也產生不出圖檔，請饒過我...]")
+                        st.caption(f"ℹ️ [系統提示：很抱歉，我非實際案例能提供的不多，這些圖片是我的極限了...")
 
-        # 💡 重大修正 3：將完整的文字與原始圖片清單存入歷史紀錄，確保對話能永續延續
+        # 將結果與強制轉型後的清單存入歷史紀錄
         st.session_state.er_messages.append({
             "role": "model", 
             "content": ai_response,
-            "image_urls": img_urls  # 儲存最原始的陣列，不進行任何過濾刪除
-        })
-        
-        st.rerun()
-
-        # 將結果與「多圖陣列」存入歷史紀錄
-        st.session_state.er_messages.append({
-            "role": "model", 
-            "content": ai_response,
-            "image_urls": valid_img_urls  # 👈 確保這裡對應的是變數名稱 valid_img_urls
+            "image_urls": img_urls if isinstance(img_urls, list) else []
         })
         
         st.rerun()
