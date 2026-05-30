@@ -86,23 +86,6 @@ with st.sidebar:
 
     st.divider()
 
-    st.header("⚙️ 後台圖片管理")
-    uploaded_files = st.file_uploader(
-        "請選擇並上傳多張臨床影像圖片（如：trauma_ct.jpg, trauma_echo.jpg 等）", 
-        type=["jpg", "jpeg", "png"], 
-        accept_multiple_files=True
-    )
-    
-    if uploaded_files:
-        for uploaded_file in uploaded_files:
-            file_name = uploaded_file.name
-            file_bytes = uploaded_file.read()
-            with open(file_name, "wb") as f:
-                f.write(file_bytes)
-        st.success(f"🎉 成功同步上傳 {len(uploaded_files)} 張圖片至系統中！")
-
-    st.divider()
-
     st.header("📋 創傷病人基本資料")
     st.subheader("吳氏婦女 (46 y/o)")
     st.write(
@@ -189,18 +172,17 @@ else:
         history_string = "\n".join(context_list)
         
         with st.spinner("急救團隊執行醫囑中..."):
-            ai_response, img_url, img_caption = call_ai_clinical_advisor(user_input, history_string)
+            # 💡 修正：只用 ai_response 和 img_urls 兩個變數來接回傳值
+            ai_response, img_urls = call_ai_clinical_advisor(user_input, history_string)
 
+        # 💡 修改點 3：過濾掉本地伺服器中不存在的壞圖檔名
         valid_img_urls = [url for url in img_urls if os.path.exists(url)]
 
-        if img_url and not os.path.exists(img_url):
-            img_url = None
-
-        # 渲染 AI 回應
+        # 渲染 AI 回應文字
         with st.chat_message("model"):
             st.markdown(ai_response)
+            # 💡 修改點 4：當前對話方塊的多圖排版渲染
             if valid_img_urls:
-                # 這裡可以用 st.columns() 讓多張圖橫向排版，或者直接上下堆疊
                 for valid_url in valid_img_urls:
                     try:
                         with Image.open(valid_url) as img:
@@ -208,11 +190,11 @@ else:
                     except:
                         pass
 
-        # 將結果存入歷史紀錄
+        # 將結果與「多圖陣列」存入歷史紀錄
         st.session_state.er_messages.append({
             "role": "model", 
             "content": ai_response,
-            "image_urls": valid_img_urls
+            "image_urls": valid_img_urls  # 👈 確保這裡對應的是變數名稱 valid_img_urls
         })
         
         st.rerun()
