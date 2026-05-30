@@ -131,7 +131,7 @@ def call_ai_clinical_advisor(user_command, history_context):
     
     可調用的影像檔名清單：
     - 'efast.jpg' (超音波 / FAST 影像 / POCUS)
-    - 'trauma_ct.jpg', 'pan_ct.jpg' (骨盆腔 / X光 / Pelvis X光 / CT)
+    - 'trauma_ct.jpg', 'pan_ct.jpg' (骨盆腔 / X光 / Pelvis X光 / CT / 電腦斷層 / Pan-scan)
 
     多圖觸發範例：
     - 如果學員說：「排常規外傷影像檢查，做 FAST 和照 Pelvis X光」 -> 你的 image_urls 應填入 ['trauma_ct.jpg', 'pan_ct.jpg']
@@ -145,33 +145,36 @@ def call_ai_clinical_advisor(user_command, history_context):
             full_prompt,
             generation_config={"response_mime_type": "application/json"}
         )
-        raw_text = response.text.strip()
         
-        # 🛡️ 步驟一：嘗試標準 JSON 解析
-        try:
-            data = json.loads(raw_text)
-            ai_response = data.get("response_text", "")
-            img_list = data.get("image_urls", [])
-            if isinstance(img_list, str):
-                img_list = [img_list]
-        except:
-            # 🛡️ 步驟二：如果 JSON 壞掉了，啟動 Regex 暴力解救機制
-            text_match = re.search(r'"response_text"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', raw_text)
-            if text_match:
-                ai_response = text_match.group(1).encode().decode('unicode_escape', errors='ignore')
-            else:
-                ai_response = f"收到醫囑：『{user_command}』。醫師，請下達進一步指示！"
+        # 🛡️ 核心安全檢查：判斷 response.text 是字串還是已經被解析好的 Dict/List
+        res_data = response.text
+        
+        if isinstance(res_data, str):
+            try:
+                data = json.loads(res_data.strip())
+            except:
+                data = {}
+        elif isinstance(res_data, dict):
+            data = res_data
+        else:
+            data = {}
+
+        # 擷取對話與圖片清單
+        ai_response = data.get("response_text", "")
+        if not ai_response:
+            ai_response = f"收到醫囑：『{user_command}』。醫師，請下達進一步指示！"
             
-            img_list = re.findall(r'[\w-]+\.(?:jpg|jpeg|png)', raw_text)
-            
+        img_list = data.get("image_urls", [])
+        if isinstance(img_list, str):
+            img_list = [img_list]
         if not isinstance(img_list, list):
             img_list = []
             
         return ai_response, img_list
 
     except Exception as e:
-        # 🛡️ 步驟三：萬一連最外層 Gemini API 都斷線，回傳基本對話保險線
-        return f"報告醫師，關於你下達的『{user_command}』指令，急診團隊執行中，請下達下一步醫囑。", []
+        # 🛡️ 萬一發生任何極端網路狀況，確保系統絕不卡死
+        return f"醫師，你下達的『{user_command}』指令，急診團隊已執行中，請下達下一步醫囑。", []
 
 # ─── 住院醫師（使用者）輸入區（🔥 強制轉型完美防禦版） ───
 if st.session_state.time_up_er:
