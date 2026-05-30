@@ -107,7 +107,12 @@ with st.sidebar:
         except:
             pass
 
-# ─── 主畫面：對話紀錄渲染（🛡️ 檔名安全過濾版） ───
+# ─── 主畫面：對話紀錄渲染（🛡️ 完整迴圈防禦版） ───
+for msg in st.session_state.er_messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        
+        # 💡 注意：底下的代碼相對於 for 要縮排 4 個空格，相對於 with 要再縮排 4 個空格
         if "image_urls" in msg and msg["image_urls"]:
             urls = msg["image_urls"]
             if isinstance(urls, str):
@@ -117,7 +122,7 @@ with st.sidebar:
                 for single_url in urls:
                     clean_url = str(single_url).strip()
                     
-                    # 💡 核心安全過濾：只有副檔名是 jpg/png，且不含中文字的才允許執行
+                    # 安全過濾：只有副檔名正確且不含中文字的才允許執行
                     if any(clean_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png']) and not re.search(r'[\u4e00-\u9fa5]', clean_url):
                         if os.path.exists(clean_url):
                             try:
@@ -125,7 +130,6 @@ with st.sidebar:
                                     st.image(clean_url, caption=f"臨床影像: {clean_url}", width=400)
                             except:
                                 pass
-
 # ─── 🤖 AI 智慧臨床核心調用 ───
 def call_ai_clinical_advisor(user_command, history_context):
     system_prompt = """
