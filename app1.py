@@ -125,7 +125,7 @@ def call_ai_clinical_advisor(user_command, history_context):
     
     請精確分析醫師最新輸入的指令，並嚴格以 JSON 格式輸出以下兩個欄位，不要包含任何額外的 Markdown 標籤：
     {
-      "response_text": "（你扮演護理師，針對醫師當前和過往指令做出專業和合宜的回應。語氣要帶有急診室的緊迫感，並動態報告最新的生命徵象數字變化）",
+      "response_text": "（你扮演護理師，針對醫師最新指令做出的專業回應。語氣要帶有急診室的緊迫感，並動態報告最新的生命徵象數字變化）",
       "image_urls": "['trauma_scene.jpg', 'trauma_room.jpg', 'trauma_ct.jpg', 'pelvic_bruising.jpg', 'chest_bruising.jpg', 'pan_ct.jpg', 'efast.jpg'
     }
     
@@ -145,36 +145,33 @@ def call_ai_clinical_advisor(user_command, history_context):
             full_prompt,
             generation_config={"response_mime_type": "application/json"}
         )
-        raw_text = response.text.strip()    
-
-            # 🛡️ 步驟一：嘗試標準 JSON 解析
-    try:
+        raw_text = response.text.strip()
+        
+        # 🛡️ 步驟一：嘗試標準 JSON 解析
+        try:
             data = json.loads(raw_text)
             ai_response = data.get("response_text", "")
             img_list = data.get("image_urls", [])
             if isinstance(img_list, str):
                 img_list = [img_list]
         except:
-            # 🛡️ 步驟二：如果 JSON 壞掉了，啟動 Regex 暴力解救機制！
-            # 提取 response_text
+            # 🛡️ 步驟二：如果 JSON 壞掉了，啟動 Regex 暴力解救機制
             text_match = re.search(r'"response_text"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', raw_text)
             if text_match:
                 ai_response = text_match.group(1).encode().decode('unicode_escape', errors='ignore')
             else:
-                ai_response = f"收到醫囑：『{user_command}』。請下達進一步指示！"
+                ai_response = f"收到醫囑：『{user_command}』。醫師，請下達進一步指示！"
             
-            # 提取所有包含 .jpg 或 .png 的檔名
             img_list = re.findall(r'[\w-]+\.(?:jpg|jpeg|png)', raw_text)
             
-        # 確保最後回傳的型態是正確的
         if not isinstance(img_list, list):
             img_list = []
             
         return ai_response, img_list
 
     except Exception as e:
-        # 🛡️ 步驟三：萬一發生網路超時等極端狀況，確保能吐出基本文字，絕不讓網頁畫面空白死鎖
-        return f"（急診室忙碌中）醫師，關於你下達的『{user_command}』指令，急診團隊執行中，病人目前生命徵象仍需密切注意，請下達下一步醫囑。", []
+        # 🛡️ 步驟三：萬一連最外層 Gemini API 都斷線，回傳基本對話保險線
+        return f"報告醫師，關於你下達的『{user_command}』指令，急診團隊執行中，請下達下一步醫囑。", []
 
 # ─── 住院醫師（使用者）輸入區（🔥 強制轉型完美防禦版） ───
 if st.session_state.time_up_er:
