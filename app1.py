@@ -172,23 +172,37 @@ else:
         history_string = "\n".join(context_list)
         
         with st.spinner("急救團隊執行醫囑中..."):
-            # 💡 修正：只用 ai_response 和 img_urls 兩個變數來接回傳值
             ai_response, img_urls = call_ai_clinical_advisor(user_input, history_string)
 
-        # 💡 修改點 3：過濾掉本地伺服器中不存在的壞圖檔名
-        valid_img_urls = [url for url in img_urls if os.path.exists(url)]
-
+        # 💡 重大修正 1：不要在這邊把檔名刪掉！不管是真是假，先把它們記錄下來
+        # 我們只在「畫面上渲染」時去做安全檢查，這樣對話紀錄絕對不會平白無故失蹤。
+        
         # 渲染 AI 回應文字
         with st.chat_message("model"):
             st.markdown(ai_response)
-            # 💡 修改點 4：當前對話方塊的多圖排版渲染
-            if valid_img_urls:
-                for valid_url in valid_img_urls:
-                    try:
-                        with Image.open(valid_url) as img:
-                            st.image(valid_url, caption=f"檢查影像: {valid_url}", width=400)
-                    except:
-                        pass
+            
+            # 如果 AI 有給圖片檔名，我們在畫面上嘗試秀出來
+            if img_urls:
+                for url in img_urls:
+                    # 如果圖片真實存在，用完美格式畫出來
+                    if os.path.exists(url):
+                        try:
+                            with Image.open(url) as img:
+                                st.image(url, caption=f"臨床影像: {url}", width=500)
+                        except:
+                            pass
+                    else:
+                        # 💡 重大修正 2：如果圖片不存在，不要崩潰，給一行溫馨提示就好，不影響對話繼續！
+                        st.caption(f"ℹ️ [系統提示：我不夠聰明，沒有實體影像也產生不出圖檔，請饒過我...]")
+
+        # 💡 重大修正 3：將完整的文字與原始圖片清單存入歷史紀錄，確保對話能永續延續
+        st.session_state.er_messages.append({
+            "role": "model", 
+            "content": ai_response,
+            "image_urls": img_urls  # 儲存最原始的陣列，不進行任何過濾刪除
+        })
+        
+        st.rerun()
 
         # 將結果與「多圖陣列」存入歷史紀錄
         st.session_state.er_messages.append({
